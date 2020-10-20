@@ -29,7 +29,7 @@ bot = commands.Bot(
     owner_id = 299001806745370624,              # user ID
     case_insensitive = True                     # case-insensitive commands 
 )
-#bot.remove_command("help")
+bot.remove_command("help")
 #os.chdir(r"/Users/iillari/Documents/briscolla_bot")
 #print(os.getcwd())
 
@@ -106,18 +106,26 @@ async def hello_command(ctx):
 
 # info menu
 @bot.command(
-    name="info_menu", 
+    name="help", 
     aliases=["info", "menu", "about"], 
     help = "Find out everything you need to know.")
-async def info_menu(ctx):
-    embed = discord.Embed(title="Commands available for the Briscola Bot", description="For more help with a command run: `briscola help [command]`", color=0xd40000)
-    embed.add_field(name="`info`", value="Info about the bot.", inline=False)
+async def help(ctx):
+    embed = discord.Embed(title="Commands available for the Briscola Bot", 
+        description="For more help with a command run: `briscola help [command]`", 
+        color=0xd40000)
+    embed.add_field(name="`info`", value="Info about the bot.", inline=True)
     embed.add_field(name="`tutorial`", value="Step-by-step tutorial.", inline=True)
     embed.add_field(name="`rules`", value="List of rules.", inline=True)
     embed.add_field(name="`play`", value="Play a game of briscola.", inline=True)
+    embed.add_field(name="`make_database`", value="Create the database where server members will be stored.", inline=True)
+    embed.add_field(name="`check_rank`", value="Check your EXP & LVL.", inline=True)
+    embed.add_field(name="`add`", value="Add a member to the database.", inline=True)
+    embed.add_field(name="`change_color`", value="Change the color of your EXP/LVL message.", inline=True)
     now = dt.now()
-    embed.set_footer(text = now.strftime("%Y-%m-%d %H:%M:%S"))
+    timeOut = now.strftime("%A %d %b %Y %I:%M:%S %p")
+    embed.set_footer(text = f"Requested by {ctx.message.author.name} on {timeOut}", icon_url = ctx.message.author.avatar_url)
     await ctx.send(embed=embed)
+
 
 # create the database
 @bot.command(
@@ -191,10 +199,12 @@ async def check_rank(ctx):
                 #await ctx.send(f"There is a member with ID {memberID}: {found}")
                 memberInfo = s.fetchMemberExpLvl()
                 embed = discord.Embed(title=f"Rank of @{memberInfo[1]}", color = memberInfo[2])
+                embed.set_thumbnail(url = ctx.message.author.avatar_url)
                 embed.add_field(name="`Level:`", value = memberInfo[4], inline = True)
                 embed.add_field(name="`Experience:`", value = memberInfo[3], inline = True)
                 now = dt.now()
-                embed.set_footer(text = now.strftime("%Y-%m-%d %H:%M:%S"))
+                timeOut = now.strftime("%A %d %b %Y %I:%M:%S %p")
+                embed.set_footer(text = f"{timeOut}")
                 await ctx.send(embed=embed)
                 #await ctx.send(s.fetchMemberExpLvl())
                 return s
@@ -250,6 +260,20 @@ async def add(ctx):
         db.commit()
         await ctx.send('Member added successfully')
         return
+
+# info menu
+@bot.command(
+    name="change_color", 
+    aliases=["cc", "change", "color"], 
+    help = "Change the color of your EXP/LVL message.")
+async def change_color(ctx):
+   #find user with their id
+   memberID = ctx.message.author.id
+   serverNameRaw = ctx.message.guild.name
+   serverName = serverNameRaw.replace(' ', '') + '.db'
+   db = sqlite3.connect(serverName)
+   cursor = db.execute('select m_color from members where m_id = ?', memberID)
+   await ctx.send(f"Name color is {cursor}")
 
 #--------------------FINISH--------------------#
 
