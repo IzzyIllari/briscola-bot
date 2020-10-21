@@ -61,6 +61,10 @@ class Member:
         memberInfo = (self.totGames, self.name, self.color, self.wins, self.losses, self.ties)
         return memberInfo
     
+    def getColor(self):
+        colorInfo = (self.color)
+        return colorInfo
+    
     def setName(self, n):
         self.name = n
 
@@ -112,7 +116,7 @@ async def hello_command(ctx):
 async def help(ctx):
     embed = discord.Embed(title="Commands available for the Briscola Bot", 
         description="For more help with a command run: `briscola help [command]`", 
-        color=0xd40000)
+        color = 0xd40000)
     embed.add_field(name="`info`", value="Info about the bot.", inline=True)
     embed.add_field(name="`tutorial`", value="Step-by-step tutorial.", inline=True)
     embed.add_field(name="`rules`", value="List of rules.", inline=True)
@@ -267,13 +271,40 @@ async def add(ctx):
     aliases=["cc", "change", "color"], 
     help = "Change the color of your EXP/LVL message.")
 async def change_color(ctx):
-   #find user with their id
-   memberID = ctx.message.author.id
-   serverNameRaw = ctx.message.guild.name
-   serverName = serverNameRaw.replace(' ', '') + '.db'
-   db = sqlite3.connect(serverName)
-   cursor = db.execute('select m_color from members where m_id = ?', memberID)
-   await ctx.send(f"Name color is {cursor}")
+    memberID = ctx.message.author.id
+    found = False
+    storage = [] #empty list for storing the student objects in memory
+    serverNameRaw = ctx.message.guild.name
+    serverName = serverNameRaw.replace(' ', '') + '.db'
+    db = sqlite3.connect(serverName)
+    try:
+        cursor = db.execute('select * from members')
+        for row in cursor:
+                mId = row[0]
+                mName = row[1]
+                mColor = row[2]
+                mExp = row[3]
+                mLvl = row[4]
+                mTotGames = row[5]
+                mWins = row[6]
+                mLosses = row[7]
+                mTies = row[8]
+                newMember = Member(mId, mName, mColor, mExp, mLvl, mTotGames, mWins, mLosses, mTies)
+                storage.append(newMember)
+    except:
+        pass
+
+    for s in storage:
+        if s.fetchMember()[0] == mId:
+            found = True
+            colorCurrent = str(hex(s.getColor()))
+            colorHex = colorCurrent.replace("0x", "#")
+            await ctx.send(f"Current color is: {colorHex}.")
+            await ctx.send("To change the color please input ")
+            return s
+    if found == False:
+        await ctx.send('No member by that Id')
+        return False
 
 #--------------------FINISH--------------------#
 
