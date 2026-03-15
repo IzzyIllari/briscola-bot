@@ -23,34 +23,69 @@ from config import (
 # ---------------------------------------------------------------------------
 
 _RULES_TEXT = """\
-**Briscola — Quick Rules (2 Players)**
-• 40-card deck, 4 suits.
-• **Rank order** (strongest first): A, 3, R (King), C (Knight), F (Jack), 7, 6, 5, 4, 2.
-• **Points:** A = 11, 3 = 10, R = 4, C = 3, F = 2, everything else = 0.
-  Total in deck: **120 points**.
-• Deal 3 cards each. Flip the next card — its suit is the **Briscola (trump)**.
-• **No follow-suit rule.** You may play any card from your hand.
-• **Trick winner:** highest trump > highest lead-suit card > everything else.
-• After each trick, both players draw (winner first) until the deck is empty.
-• **Win:** 61+ points. A 60–60 split is a tie."""
+**Briscola: How to Play**
+
+**The deck**
+40 cards, 4 suits: Denari (♦), Coppe (♥), Spade (♠), Bastoni (♣).
+Rank order, strongest first: `A  3  R  C  F  7  6  5  4  2`
+
+**Points per card**
+```
+Ace  (A) = 11     King   (R) = 4
+Three(3) = 10     Knight (C) = 3
+                  Jack   (F) = 2
+7 through 2 = 0 each     Total in deck = 120
+```
+
+**Setup**
+Deal 3 cards to each player. Flip the next card face-up next to the deck. That card's suit is the **Briscola** (trump) for the whole game.
+
+**On your turn**
+Play one card. No follow-suit rule; you can play anything from your hand.
+
+**Who wins the trick**
+1. Highest trump card, if any trump was played
+2. Otherwise, highest card in the lead suit
+3. Off-suit, non-trump cards never win
+
+**Drawing**
+After each trick, both players draw one card (winner first) until the deck is gone. The face-up trump card is drawn last.
+
+**Winning**
+First to 61+ points wins. 60-60 is a tie.\
+"""
 
 _DIFFICULTY_TEXT = """\
-**AI Difficulty Levels**
-• **easy** — plays a completely random card every turn.
-• **medium** — greedy heuristics: wins high-value tricks cheaply, dumps trash otherwise.
-• **hard** — trump conservation, 1-ply worst-case analysis when leading, \
-and full alpha-beta minimax for the last 3 tricks.
-• **extreme** — Monte Carlo: simulates 40 complete games per candidate card \
-using Hard vs Medium rollouts to estimate expected final score."""
+**Bot Difficulty Levels**
+
+`easy`
+Plays a random card every turn. No strategy at all. Will throw its trump Ace into a 0-point trick without hesitation.
+
+`medium`
+Greedy heuristics. Contests any trick with a pointed lead card, dumps trash when leading. No card memory.
+
+`hard`
+Tracks every card played. Uses probabilistic look-ahead in the midgame by sampling possible opponent hands from the unseen card pool. Switches to exact alpha-beta minimax once the draw pile empties. Does not cheat or peek at your hand.
+
+`extreme`
+Monte Carlo with 100 simulations per candidate card. The reward function specifically bonuses capturing your Ace and 3, and penalizes losing its own. Reads suit exhaustion from played cards and leads into suits you're likely dry in. Switches to exact minimax at endgame. It will hunt you.\
+"""
 
 _DECKS_TEXT = """\
 **Available Decks**
-• `piacentine` — Italian Piacentine regional deck (default)
-• `neapolitan` — Italian Neapolitan regional deck
-• `spanish` — Spanish Brisca (Oros / Copas / Espadas / Bastos)
-• `french` — French-suited 40-card Briscola (♥ ♦ ♠ ♣)
 
-Specify a deck with: `/briscola_vs_bot deck:spanish`"""
+`piacentine` (default) - Piacentine regional deck, Northern Italy
+`napoletane` - Napoletane regional deck, Naples
+`siciliane` - Siciliane regional deck, Sicily
+`romagnole` - Romagnole regional deck, Emilia-Romagna
+`triestine` - Triestine regional deck, Trieste
+
+All decks use the same rules and rank structure. The artwork is different. Piacentine images are live now; others coming as art gets added.
+
+Pick a deck when starting a game:
+`/briscola_vs_bot deck:napoletane`
+`/briscola_1v1 deck:siciliane`\
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +107,7 @@ class GameCog(commands.Cog):
     )
     @app_commands.describe(
         difficulty="easy / medium / hard / extreme  (default: medium)",
-        deck="piacentine / neapolitan / spanish / french  (default: piacentine)",
+        deck="piacentine / napoletane / siciliane / romagnole / triestine",
     )
     async def vs_bot(
         self,
@@ -144,7 +179,7 @@ class GameCog(commands.Cog):
     )
     @app_commands.describe(
         opponent="The player you want to challenge.",
-        deck="piacentine / neapolitan / spanish / french  (default: piacentine)",
+        deck="piacentine / napoletane / siciliane / romagnole / triestine",
     )
     async def challenge(
         self,
@@ -337,19 +372,46 @@ class GameCog(commands.Cog):
     ) -> None:
         s = section.lower().strip()
         parts = []
+        show_deck_preview = False
+
         if s in ("all", "rules"):
             parts.append(_RULES_TEXT)
         if s in ("all", "difficulty", "difficulties"):
             parts.append(_DIFFICULTY_TEXT)
         if s in ("all", "decks", "deck"):
             parts.append(_DECKS_TEXT)
+            show_deck_preview = True
         if not parts:
             parts.append(
                 "Unknown section. Options: `rules`, `difficulty`, `decks`, `all`."
             )
-        await interaction.response.send_message(
-            "\n\n".join(parts), ephemeral=True
-        )
+
+        content = "\n\n".join(parts)
+
+        if show_deck_preview:
+            # Show the 4 Aces of the default (Piacentine) deck as a visual preview.
+            from engine.cards import PIACENTINE
+            cfg = PIACENTINE
+            all_cards = cfg.build_deck(shuffle=False)
+            aces = [c for c in all_cards if c.rank == "A"]
+            embeds = []
+            for card in aces:
+                url = cfg.image_url(card)
+                if url:
+                    e = discord.Embed(
+                        description=f"{cfg.short(card)}  ({card.suit})",
+                        color=0xFFD700,
+                    )
+                    e.set_image(url=url)
+                    embeds.append(e)
+
+            if embeds:
+                await interaction.response.send_message(
+                    content=content, embeds=embeds, ephemeral=True
+                )
+                return
+
+        await interaction.response.send_message(content=content, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:
