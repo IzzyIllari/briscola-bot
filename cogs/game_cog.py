@@ -74,18 +74,84 @@ Monte Carlo with 100 simulations per candidate card. The reward function specifi
 _DECKS_TEXT = """\
 **Available Decks**
 
-`piacentine` (default) - Piacentine regional deck, Northern Italy
-`napoletane` - Napoletane regional deck, Naples
-`siciliane` - Siciliane regional deck, Sicily
-`romagnole` - Romagnole regional deck, Emilia-Romagna
-`triestine` - Triestine regional deck, Trieste
+`piacentine` (default) -- Piacenza, Northern Italy
+`napoletane` -- Naples, Southern Italy
+`siciliane` -- Sicily
+`romagnole` -- Emilia-Romagna
+`triestine` -- Trieste, Northeast Italy
 
-All decks use the same rules and rank structure. The artwork is different. Piacentine images are live now; others coming as art gets added.
+All five are Spanish-suited Italian regional decks: straight swords, \
+cudgel clubs, rounded cups, coin aces. Same 40 cards, same rules, \
+different artwork from different corners of Italy.
 
-Pick a deck when starting a game:
+Use `/briscola_deck` to see the 4 aces and read about any deck before picking.
+
+Start a game with a specific deck:
 `/briscola_vs_bot deck:napoletane`
 `/briscola_1v1 deck:siciliane`\
 """
+
+# Per-deck descriptions used by /briscola_deck
+# Written from research, no AI filler.
+_DECK_INFO: dict = {
+    "piacentine": (
+        "**Piacentine** -- Piacenza, Emilia-Romagna\n\n"
+        "The only Spanish-suited deck from Northern Italy. "
+        "Piacenza was under Spanish Bourbon rule, but the deck's current form "
+        "actually traces to French Aluette cards brought during the late 18th century "
+        "occupation -- it then drifted toward its own look over the following hundred years. "
+        "One of the two most-played decks in Italy (along with the Napoletane). "
+        "The courts are double-headed and reversible, unusual for Italian cards. "
+        "The Ace of Swords is held by a cherub; the Ace of Coins carries an eagle. "
+        "Straight swords and knotted cudgel clubs mark it as Spanish-style, "
+        "which makes it look out of place for a northern deck -- but that's the history."
+    ),
+    "napoletane": (
+        "**Napoletane** -- Naples, Campania\n\n"
+        "The most widely used deck across southern and central Italy. "
+        "Single-headed court cards, no frames around the card face, "
+        "and a handful of distinctive details that players recognize on sight: "
+        "the 3 of Clubs has a yellow grotesque face with a large moustache (the Gatto Mammone), "
+        "the 5 of Swords shows a small rural scene with figures in the background, "
+        "and the Knight of Swords is depicted as a Moorish rider in a turban. "
+        "The Ace of Coins has a double-headed eagle. "
+        "Cards are slightly shorter than Piacentine. "
+        "If you only ever play with one Italian deck, most people in the south would say this one."
+    ),
+    "siciliane": (
+        "**Siciliane** -- Sicily\n\n"
+        "The Sicilian deck shares the Spanish-suited structure of the Napoletane "
+        "but has its own regional character built up since the early 19th century. "
+        "The Ace of Coins features an eagle, similar to the Piacentine, "
+        "and the swords have a drop-point blade rather than a straight edge -- "
+        "a small but visible difference from the Neapolitan pattern. "
+        "All the knights and kings face left instead of right. "
+        "Used in Sicily for Briscola, Scopa, and local variants."
+    ),
+    "romagnole": (
+        "**Romagnole** -- Emilia-Romagna\n\n"
+        "Played mainly in the provinces of Rimini, Forli-Cesena, Ravenna, Ferrara, "
+        "and Imola, and across the border in the Republic of San Marino. "
+        "Sits stylistically between the Napoletane and the Piacentine: "
+        "the aces follow the Northern Italian look, the cups and swords lean Southern, "
+        "and the clubs are nearly identical to Spanish batons. "
+        "Full-figure (non-reversible) court cards. "
+        "If you drew a line between Naples and Piacenza on a map, "
+        "the Romagnole would be somewhere in the middle -- geographically and artistically."
+    ),
+    "triestine": (
+        "**Triestine** -- Trieste, Friuli-Venezia Giulia\n\n"
+        "Descends from the old Venice pattern, which held its Italian character "
+        "through Austria's occupation of the Veneto. "
+        "By around 1850 a distinct Trieste style had emerged, "
+        "the most recognizable feature being labeled title banners on the court cards -- "
+        "each one names the figure it depicts, which no other Italian regional deck does. "
+        "Narrower than most Italian cards, solid colors, minimal shading. "
+        "Modiano, the company that makes most Italian regional decks and has been "
+        "the official card supplier for the World Series of Poker since 2015, "
+        "was founded in Trieste in 1868 -- so this deck is essentially their home turf."
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +455,7 @@ class GameCog(commands.Cog):
         content = "\n\n".join(parts)
 
         if show_deck_preview:
-            # Show the 4 Aces of the default (Piacentine) deck as a visual preview.
+            # Default preview: show Piacentine aces as a taster
             from engine.cards import PIACENTINE
             cfg = PIACENTINE
             all_cards = cfg.build_deck(shuffle=False)
@@ -399,7 +465,7 @@ class GameCog(commands.Cog):
                 url = cfg.image_url(card)
                 if url:
                     e = discord.Embed(
-                        description=f"{cfg.short(card)}  ({card.suit})",
+                        description=f"{cfg.short(card)}  ({card.suit})  -- Piacentine (default)",
                         color=0xFFD700,
                     )
                     e.set_image(url=url)
@@ -412,6 +478,61 @@ class GameCog(commands.Cog):
                 return
 
         await interaction.response.send_message(content=content, ephemeral=True)
+
+
+    # ------------------------------------------------------------------
+    # /briscola_deck  — preview a deck's aces + read its background
+    # ------------------------------------------------------------------
+
+    @app_commands.command(
+        name="briscola_deck",
+        description="Preview a deck's 4 aces and read about its regional history.",
+    )
+    @app_commands.describe(
+        deck="piacentine / napoletane / siciliane / romagnole / triestine"
+    )
+    async def deck_preview(
+        self,
+        interaction: discord.Interaction,
+        deck: str = DEFAULT_DECK,
+    ) -> None:
+        deck = deck.lower()
+        cfg = DECK_REGISTRY.get(deck)
+        if cfg is None:
+            await interaction.response.send_message(
+                f"Unknown deck `{deck}`. Options: {', '.join(DECK_REGISTRY)}",
+                ephemeral=True,
+            )
+            return
+
+        info = _DECK_INFO.get(deck, f"**{cfg.label}**\nNo additional info yet.")
+
+        # Build 4 ace embeds for this deck
+        all_cards = cfg.build_deck(shuffle=False)
+        aces = [c for c in all_cards if c.rank == "A"]
+        embeds = []
+        for card in aces:
+            url = cfg.image_url(card)
+            if url:
+                e = discord.Embed(
+                    description=f"{cfg.short(card)}  ({card.suit})",
+                    color=0xFFD700,
+                )
+                e.set_image(url=url)
+                embeds.append(e)
+
+        content = (
+            f"{info}\n\n"
+            f"Start a game with this deck:\n"
+            f"`/briscola_vs_bot deck:{deck}`  or  `/briscola_1v1 deck:{deck}`"
+        )
+
+        if embeds:
+            await interaction.response.send_message(
+                content=content, embeds=embeds, ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(content=content, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:
