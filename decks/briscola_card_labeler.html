@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Briscola Card Labeler</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f4f1;
+    --bg3: #eeede9;
+    --text: #1a1a18;
+    --text2: #5a5a56;
+    --text3: #9a9a94;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.25);
+    --danger: #c0392b;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg2: #252522;
+      --bg3: #2e2e2b;
+      --text: #f0efe8;
+      --text2: #a0a09a;
+      --text3: #606058;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.22);
+      --danger: #e74c3c;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
+  .app { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 13px; color: var(--text2); margin-bottom: 2rem; }
+
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; }
+
+  label.field-label { font-size: 11px; color: var(--text2); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  input[type="text"] { padding: 7px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 14px; width: 240px; }
+  input[type="text"]:focus { outline: none; border-color: var(--text2); }
+  input[type="file"] { font-size: 13px; color: var(--text2); }
+
+  .btn { padding: 7px 16px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px; transition: background 0.1s; }
+  .btn:hover:not(:disabled) { background: var(--bg2); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { font-weight: 500; }
+  .sel-btn { padding: 6px 13px; border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--bg2); color: var(--text); cursor: pointer; font-size: 13px; transition: background 0.1s; }
+  .sel-btn:hover { background: var(--bg3); }
+  .sel-btn.active { background: var(--bg3); border-color: var(--border2); font-weight: 500; }
+
+  .screen { display: none; }
+  .screen.visible { display: block; }
+
+  .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; }
+  .progress-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; }
+  .progress-fill { height: 100%; background: var(--text2); border-radius: 2px; transition: width 0.2s; }
+
+  .label-layout { display: flex; gap: 2rem; align-items: flex-start; }
+  .card-preview { flex: 0 0 150px; }
+  .card-preview img { width: 100%; border: 0.5px solid var(--border); border-radius: var(--radius); display: block; }
+  .card-preview p { font-size: 10px; color: var(--text3); margin-top: 6px; word-break: break-all; line-height: 1.4; }
+  .controls { flex: 1; }
+
+  .section-label { font-size: 11px; color: var(--text2); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; }
+  .btn-group { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 1.25rem; }
+
+  .nav-row { display: flex; align-items: center; gap: 8px; margin-top: 0.5rem; }
+  .skip-hint { font-size: 12px; color: var(--danger); margin-left: 4px; }
+
+  .review-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 0.75rem; }
+  .review-status { font-size: 13px; color: var(--text2); }
+  .review-hint { font-size: 12px; color: var(--text3); margin-bottom: 1rem; }
+  .review-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 8px; }
+  .review-card { cursor: pointer; text-align: center; }
+  .review-card img { width: 100%; border-radius: var(--radius); display: block; transition: border-color 0.1s; }
+  .review-card:hover img { border-color: var(--border2) !important; }
+  .review-card p { font-size: 10px; margin: 4px 0 0; word-break: break-all; line-height: 1.3; }
+
+  .kbd { display: inline-block; font-size: 10px; padding: 2px 6px; border: 0.5px solid var(--border2); border-radius: 4px; background: var(--bg2); color: var(--text2); font-family: monospace; margin-right: 4px; }
+  .shortcuts { font-size: 12px; color: var(--text3); margin-top: 1rem; line-height: 2; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Briscola card labeler</h1>
+  <p class="subtitle">Extract card images, label each one, and download a ZIP with proper filenames for the bot.</p>
+
+  <div id="screen-setup" class="screen card visible">
+    <div style="margin-bottom:1.25rem;">
+      <label class="field-label">Deck name</label>
+      <input type="text" id="deck-name" value="piacentine" placeholder="e.g. piacentine, napoletane">
+    </div>
+    <div style="margin-bottom:1.5rem;">
+      <label class="field-label">Card images (select all at once)</label>
+      <input type="file" id="file-input" multiple accept="image/*" onchange="onFiles(event)">
+      <p id="file-count" style="font-size:12px; color:var(--text3); margin-top:6px;"></p>
+    </div>
+    <button class="btn btn-primary" id="start-btn" onclick="startLabeling()" disabled>Start labeling →</button>
+  </div>
+
+  <div id="screen-label" class="screen">
+    <div class="progress-row">
+      <span id="progress-text" style="font-size:12px; color:var(--text2); white-space:nowrap;"></span>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <span id="label-count" style="font-size:12px; color:var(--text3); white-space:nowrap;"></span>
+    </div>
+
+    <div class="card">
+      <div class="label-layout">
+        <div class="card-preview">
+          <img id="card-img" src="" alt="card">
+          <p id="filename-lbl"></p>
+        </div>
+        <div class="controls">
+          <p class="section-label">Suit</p>
+          <div class="btn-group">
+            <button class="sel-btn" data-type="suit" data-val="denari" onclick="pick('suit','denari')">Denari · coins</button>
+            <button class="sel-btn" data-type="suit" data-val="coppe" onclick="pick('suit','coppe')">Coppe · cups</button>
+            <button class="sel-btn" data-type="suit" data-val="bastoni" onclick="pick('suit','bastoni')">Bastoni · sticks</button>
+            <button class="sel-btn" data-type="suit" data-val="spade" onclick="pick('suit','spade')">Spade · swords</button>
+          </div>
+
+          <p class="section-label">Rank</p>
+          <div class="btn-group">
+            <button class="sel-btn" data-type="rank" data-val="asso" onclick="pick('rank','asso')">Asso · ace</button>
+            <button class="sel-btn" data-type="rank" data-val="2" onclick="pick('rank','2')">2</button>
+            <button class="sel-btn" data-type="rank" data-val="3" onclick="pick('rank','3')">3</button>
+            <button class="sel-btn" data-type="rank" data-val="4" onclick="pick('rank','4')">4</button>
+            <button class="sel-btn" data-type="rank" data-val="5" onclick="pick('rank','5')">5</button>
+            <button class="sel-btn" data-type="rank" data-val="6" onclick="pick('rank','6')">6</button>
+            <button class="sel-btn" data-type="rank" data-val="7" onclick="pick('rank','7')">7</button>
+            <button class="sel-btn" data-type="rank" data-val="fante" onclick="pick('rank','fante')">Fante · jack</button>
+            <button class="sel-btn" data-type="rank" data-val="cavallo" onclick="pick('rank','cavallo')">Cavallo · knight</button>
+            <button class="sel-btn" data-type="rank" data-val="re" onclick="pick('rank','re')">Re · king</button>
+          </div>
+
+          <div class="nav-row">
+            <button class="btn" id="prev-btn" onclick="nav(-1)">← Back</button>
+            <button class="btn btn-primary" id="next-btn" onclick="nav(1)">Next →</button>
+            <span class="skip-hint" id="skip-hint"></span>
+          </div>
+
+          <div class="shortcuts">
+            <span class="kbd">←→</span> navigate &nbsp;
+            <span class="kbd">1–7</span> rank 1–7 &nbsp;
+            <span class="kbd">A</span> asso &nbsp;
+            <span class="kbd">J</span> fante &nbsp;
+            <span class="kbd">C</span> cavallo &nbsp;
+            <span class="kbd">K</span> re &nbsp;
+            <span class="kbd">D</span> denari &nbsp;
+            <span class="kbd">O</span> coppe &nbsp;
+            <span class="kbd">B</span> bastoni &nbsp;
+            <span class="kbd">S</span> spade
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-review" class="screen">
+    <div class="review-header">
+      <span class="review-status" id="review-status"></span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" onclick="goBack()">← Edit labels</button>
+        <button class="btn btn-primary" id="dl-btn" onclick="downloadZip()">Download ZIP</button>
+      </div>
+    </div>
+    <p class="review-hint">Click any card to edit its label. Red = problem.</p>
+    <div class="review-grid" id="review-grid"></div>
+  </div>
+</div>
+
+<script>
+const S = { deckName: 'piacentine', files: [], urls: [], labels: [], current: 0 };
+
+function detectSuit(fn) {
+  fn = fn.toLowerCase();
+  if (fn.includes('coin') || fn.includes('denar')) return 'denari';
+  if (fn.includes('cup') || fn.includes('copp')) return 'coppe';
+  if (fn.includes('stick') || fn.includes('bast') || fn.includes('club')) return 'bastoni';
+  if (fn.includes('sword') || fn.includes('spade')) return 'spade';
+  return null;
+}
+
+function onFiles(e) {
+  S.files = Array.from(e.target.files).sort((a,b) => a.name.localeCompare(b.name));
+  S.urls.forEach(u => URL.revokeObjectURL(u));
+  S.urls = S.files.map(f => URL.createObjectURL(f));
+  S.labels = S.files.map(f => ({ suit: detectSuit(f.name), rank: null }));
+  const n = S.files.length;
+  document.getElementById('file-count').textContent = `${n} file${n===1?'':'s'} selected`;
+  document.getElementById('start-btn').disabled = n === 0;
+}
+
+function startLabeling() {
+  S.deckName = (document.getElementById('deck-name').value.trim() || 'deck').toLowerCase().replace(/\s+/g,'_');
+  S.current = 0;
+  show('label');
+  render();
+}
+
+function show(name) {
+  ['setup','label','review'].forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('visible', s === name);
+  });
+}
+
+function render() {
+  const i = S.current, n = S.files.length, lbl = S.labels[i];
+  document.getElementById('progress-text').textContent = `Card ${i+1} of ${n}`;
+  document.getElementById('progress-fill').style.width = Math.round(((i+1)/n)*100)+'%';
+  const done = S.labels.filter(l => l.suit && l.rank).length;
+  document.getElementById('label-count').textContent = `${done}/${n} labeled`;
+  document.getElementById('card-img').src = S.urls[i];
+  document.getElementById('filename-lbl').textContent = S.files[i].name;
+  document.querySelectorAll('[data-type="suit"]').forEach(b => b.classList.toggle('active', b.dataset.val === lbl.suit));
+  document.querySelectorAll('[data-type="rank"]').forEach(b => b.classList.toggle('active', b.dataset.val === lbl.rank));
+  document.getElementById('prev-btn').disabled = i === 0;
+  const isLast = i === n - 1;
+  const nb = document.getElementById('next-btn');
+  nb.textContent = isLast ? 'Review all →' : 'Next →';
+  document.getElementById('skip-hint').textContent = '';
+}
+
+function pick(type, val) {
+  S.labels[S.current][type] = val;
+  render();
+  if (S.labels[S.current].suit && S.labels[S.current].rank) {
+    if (S.current < S.files.length - 1) {
+      S.current++;
+      render();
+    }
+  }
+}
+
+function nav(dir) {
+  const lbl = S.labels[S.current];
+  if (dir === 1 && (!lbl.suit || !lbl.rank)) {
+    document.getElementById('skip-hint').textContent = 'Label both suit + rank first.';
+    return;
+  }
+  if (dir === 1 && S.current === S.files.length - 1) { showReview(); return; }
+  S.current = Math.max(0, Math.min(S.files.length - 1, S.current + dir));
+  render();
+}
+
+function showReview() {
+  show('review');
+  const n = S.files.length;
+  const done = S.labels.filter(l => l.suit && l.rank).length;
+  const allNames = S.labels.map(l => l.suit && l.rank ? `${S.deckName}_${l.suit}_${l.rank}` : null);
+  const dupes = [...new Set(allNames.filter((name, i) => name && allNames.indexOf(name) !== i))];
+  let status = `${done} of ${n} labeled`;
+  if (n - done > 0) status += ` · ${n-done} unlabeled`;
+  if (dupes.length > 0) status += ` · ${dupes.length} duplicate name(s)`;
+  document.getElementById('review-status').textContent = status;
+  const dlBtn = document.getElementById('dl-btn');
+  dlBtn.disabled = (n - done > 0) || dupes.length > 0;
+  const grid = document.getElementById('review-grid');
+  grid.innerHTML = '';
+  S.labels.forEach((lbl, i) => {
+    const name = lbl.suit && lbl.rank ? `${S.deckName}_${lbl.suit}_${lbl.rank}` : null;
+    const bad = !lbl.suit || !lbl.rank || dupes.includes(name);
+    const div = document.createElement('div');
+    div.className = 'review-card';
+    div.onclick = () => { S.current = i; show('label'); render(); };
+    const img = document.createElement('img');
+    img.src = S.urls[i];
+    img.style.border = `0.5px solid ${bad ? 'var(--danger)' : 'var(--border)'}`;
+    const p = document.createElement('p');
+    p.style.color = bad ? 'var(--danger)' : 'var(--text3)';
+    p.textContent = !lbl.suit || !lbl.rank ? '⚠ unlabeled' : (dupes.includes(name) ? '⚠ duplicate' : `${lbl.suit}_${lbl.rank}`);
+    div.appendChild(img); div.appendChild(p);
+    grid.appendChild(div);
+  });
+}
+
+function goBack() { show('label'); render(); }
+
+function readAsBuffer(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsArrayBuffer(file);
+  });
+}
+
+async function downloadZip() {
+  const btn = document.getElementById('dl-btn');
+  btn.textContent = 'Building ZIP...'; btn.disabled = true;
+  try {
+    const zip = new JSZip();
+    const folder = zip.folder(S.deckName);
+    for (let i = 0; i < S.files.length; i++) {
+      const l = S.labels[i];
+      const ext = S.files[i].name.split('.').pop().toLowerCase();
+      const fname = `${S.deckName}_${l.suit}_${l.rank}.${ext === 'jpeg' ? 'jpg' : ext}`;
+      folder.file(fname, await readAsBuffer(S.files[i]));
+    }
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${S.deckName}_cards.zip`; a.click();
+    URL.revokeObjectURL(url);
+    btn.textContent = 'Downloaded!';
+  } catch(err) {
+    btn.textContent = 'Error — try again'; btn.disabled = false;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('screen-label').classList.contains('visible')) return;
+  if (e.target.tagName === 'INPUT') return;
+  const key = e.key.toLowerCase();
+  if (key === 'arrowright') { nav(1); return; }
+  if (key === 'arrowleft') { nav(-1); return; }
+  const rankMap = { '1':'asso', 'a':'asso', '2':'2','3':'3','4':'4','5':'5','6':'6','7':'7', 'j':'fante', 'c':'cavallo', 'k':'re' };
+  const suitMap = { 'd':'denari', 'o':'coppe', 'b':'bastoni', 's':'spade' };
+  if (rankMap[key]) pick('rank', rankMap[key]);
+  if (suitMap[key]) pick('suit', suitMap[key]);
+});
+</script>
+</body>
+</html>
