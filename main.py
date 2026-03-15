@@ -47,8 +47,17 @@ async def main() -> None:
     async def on_ready() -> None:
         print(f"✅  Logged in as {bot.user}  (ID: {bot.user.id})")
         try:
-            synced = await bot.tree.sync()
-            print(f"✅  Synced {len(synced)} slash command(s).")
+            # Guild sync is instant — used for the development server.
+            # Global sync (no guild) can take up to an hour to propagate.
+            from config import DEV_GUILD_ID
+            if DEV_GUILD_ID:
+                guild = discord.Object(id=DEV_GUILD_ID)
+                bot.tree.copy_global_to(guild=guild)
+                synced = await bot.tree.sync(guild=guild)
+                print(f"✅  Synced {len(synced)} slash command(s) to dev guild (instant).")
+            else:
+                synced = await bot.tree.sync()
+                print(f"✅  Synced {len(synced)} slash command(s) globally (may take up to 1hr).")
         except Exception as exc:
             print(f"❌  Failed to sync commands: {exc}")
 

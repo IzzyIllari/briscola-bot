@@ -17,6 +17,11 @@ DEFAULT_DIFFICULTY: str = "medium"
 VALID_DIFFICULTIES: tuple = ("easy", "medium", "hard", "extreme")
 EXTREME_ROLLOUTS: int = int(os.getenv("EXTREME_ROLLOUTS", "100"))
 
+# Development server for instant slash command syncing.
+# Set this to your Discord server ID (right-click server > Copy Server ID).
+# Leave empty ("") for global sync only (up to 1hr propagation delay).
+DEV_GUILD_ID: int = int(os.getenv("DEV_GUILD_ID", "0")) or 0
+
 # Leaderboard
 LEADERBOARD_PAGE_SIZE: int = 10
 
