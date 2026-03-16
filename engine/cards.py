@@ -8,6 +8,7 @@ The engine never needs to consult a config at runtime; the bot layer
 uses the config only for display (emoji, image URLs, labels).
 """
 from __future__ import annotations
+import pathlib
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 import random
@@ -91,7 +92,30 @@ class DeckConfig:
         return f"{card.rank}{self.symbol(card)}"
 
     def image_url(self, card: Card) -> Optional[str]:
-        return f"{self.image_base_url}/{card.suit_key}_{card.rank}.png"
+        """
+        Builds the GitHub raw URL for a card image.
+        Path:     decks/{name}/use/
+        Filename: {name}_{suit_key}_{rank_filename}.png
+        e.g.  decks/piacentine/use/piacentine_bastoni_asso.png
+        Used for single-card embeds (trump display, deck preview).
+        """
+        rank_filename = _RANK_FILENAME.get(card.rank, card.rank.lower())
+        filename = f"{self.name}_{card.suit_key}_{rank_filename}.png"
+        return f"{self.image_base_url}/{filename}"
+
+    def local_image_path(self, card: Card) -> pathlib.Path:
+        """
+        Returns the local filesystem path for a card image.
+        Used by the Pillow hand compositor — much faster than fetching
+        from GitHub for frequently-called operations like /briscola_hand.
+
+        NOTE: Only works when the bot runs from the repo root with the
+        decks/ folder present locally. If you move to a hosted server,
+        copy the decks/ folder alongside the code.
+        """
+        rank_filename = _RANK_FILENAME.get(card.rank, card.rank.lower())
+        filename = f"{self.name}_{card.suit_key}_{rank_filename}.png"
+        return pathlib.Path("decks") / self.name / "use" / filename
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +133,18 @@ _ITALIAN_RANK_POINTS: Dict[str, int] = {
 }
 
 _GITHUB_BASE = (
-    "https://raw.githubusercontent.com/IzzyIllari/briscola-bot/main/cropped_cards"
+    "https://raw.githubusercontent.com/IzzyIllari/briscola-bot/main/decks"
 )
+
+# Maps the engine's internal rank codes to the filenames used in decks/*/use/
+_RANK_FILENAME: Dict[str, str] = {
+    "A": "asso",
+    "R": "re",
+    "C": "cavallo",
+    "F": "fante",
+    "2": "2", "3": "3", "4": "4",
+    "5": "5", "6": "6", "7": "7",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +162,7 @@ PIACENTINE = DeckConfig(
     ],
     rank_order=_ITALIAN_RANK_ORDER,
     rank_points=_ITALIAN_RANK_POINTS,
-    image_base_url=f"{_GITHUB_BASE}/piacentine",
+    image_base_url=f"{_GITHUB_BASE}/piacentine/use",
     symbol_map={
         "denari":  "♦",
         "coppe":   "♥",
@@ -164,7 +198,7 @@ def _italian_deck(name: str, label: str) -> DeckConfig:
         suits=_ITALIAN_SUITS,
         rank_order=_ITALIAN_RANK_ORDER,
         rank_points=_ITALIAN_RANK_POINTS,
-        image_base_url=f"{_GITHUB_BASE}/{name}",
+        image_base_url=f"{_GITHUB_BASE}/{name}/use",
         symbol_map=_ITALIAN_SYMBOLS,
     )
 

@@ -96,7 +96,7 @@ class HandSelect(discord.ui.Select):
         # Update the ephemeral message to confirm the play
         await interaction.response.edit_message(
             content=(
-                f"✅ You played **{cfg.short(card)}** "
+                f"You played **{cfg.short(card)}** "
                 f"({card.rank} of {card.suit}, {card.points} pts)."
             ),
             view=None,

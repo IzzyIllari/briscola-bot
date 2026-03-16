@@ -8,7 +8,7 @@ from typing import Optional
 import discord
 from discord.ext import commands
 from discord import app_commands
-from db.database import get_leaderboard, get_player_stats, get_leaderboard_count
+from db.database import get_leaderboard, get_player_stats, get_leaderboard_count, get_bot_stats
 from config import LEADERBOARD_PAGE_SIZE
 
 _MEDALS = {0: "🥇", 1: "🥈", 2: "🥉"}
@@ -194,6 +194,57 @@ class LeaderboardCog(commands.Cog):
             embed.add_field(name="Hot Streak 🔥", value=f"{streak} wins in a row!")
         elif streak <= -3:
             embed.add_field(name="Cold Streak 🥶", value=f"{abs(streak)} losses in a row")
+
+        await interaction.response.send_message(embed=embed)
+
+
+    @app_commands.command(
+        name="briscola_bot_stats",
+        description="How many games has the bot won? Broken down by difficulty.",
+    )
+    async def the_bot_stats(self, interaction: discord.Interaction) -> None:
+        data = await get_bot_stats(interaction.guild_id)
+        overall = data["overall"]
+        by_diff = data["by_difficulty"]
+
+        games, bot_wins, human_wins, ties = overall if overall else (0, 0, 0, 0)
+        games = games or 0
+        bot_wins = bot_wins or 0
+        human_wins = human_wins or 0
+        ties = ties or 0
+
+        if games == 0:
+            await interaction.response.send_message(
+                "No vs-bot games recorded yet on this server.", ephemeral=True
+            )
+            return
+
+        bot_rate = 100 * bot_wins / games if games else 0
+        human_rate = 100 * human_wins / games if games else 0
+
+        embed = discord.Embed(title="🤖 Bot's Record", color=0x2F3136)
+        embed.add_field(name="Games played", value=str(games))
+        embed.add_field(name="Bot wins", value=f"{bot_wins} ({bot_rate:.0f}%)")
+        embed.add_field(name="Human wins", value=f"{human_wins} ({human_rate:.0f}%)")
+        if ties:
+            embed.add_field(name="Ties", value=str(ties))
+
+        if by_diff:
+            lines = []
+            for diff, d_games, d_bot_wins in by_diff:
+                d_bot_wins = d_bot_wins or 0
+                d_human = d_games - d_bot_wins
+                rate = 100 * d_bot_wins / d_games if d_games else 0
+                bar = "█" * int(rate / 10) + "░" * (10 - int(rate / 10))
+                lines.append(
+                    f"`{diff:8s}` {bar} {rate:.0f}%  "
+                    f"({d_bot_wins}W / {d_human}L / {d_games} played)"
+                )
+            embed.add_field(
+                name="By difficulty",
+                value="\n".join(lines),
+                inline=False,
+            )
 
         await interaction.response.send_message(embed=embed)
 

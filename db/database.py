@@ -197,6 +197,49 @@ async def get_leaderboard_count(guild_id: int) -> int:
             return row[0] if row else 0
 
 
+async def get_bot_stats(guild_id: int) -> dict:
+    """
+    Returns the bot's all-time record for this server, broken down by difficulty.
+    Pulls from game_history where p1_id = 0 (vs_bot games only).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Overall record
+        async with db.execute(
+            """
+            SELECT
+                COUNT(*) as games,
+                SUM(CASE WHEN winner_id = 0 THEN 1 ELSE 0 END) as bot_wins,
+                SUM(CASE WHEN winner_id != 0 AND winner_id IS NOT NULL THEN 1 ELSE 0 END) as human_wins,
+                SUM(CASE WHEN winner_id IS NULL THEN 1 ELSE 0 END) as ties
+            FROM game_history
+            WHERE guild_id = ? AND p1_id = 0
+            """,
+            (guild_id,),
+        ) as cur:
+            overall = await cur.fetchone()
+
+        # By difficulty
+        async with db.execute(
+            """
+            SELECT
+                difficulty,
+                COUNT(*) as games,
+                SUM(CASE WHEN winner_id = 0 THEN 1 ELSE 0 END) as bot_wins
+            FROM game_history
+            WHERE guild_id = ? AND p1_id = 0 AND difficulty IS NOT NULL
+            GROUP BY difficulty
+            ORDER BY difficulty
+            """,
+            (guild_id,),
+        ) as cur:
+            by_diff = await cur.fetchall()
+
+    return {
+        "overall": overall,   # (games, bot_wins, human_wins, ties)
+        "by_difficulty": by_diff,  # [(difficulty, games, bot_wins), ...]
+    }
+
+
 async def get_player_stats(guild_id: int, user_id: int) -> Optional[Tuple]:
     """Returns (user_id, wins, losses, ties, total_points, elo, streak) or None."""
     async with aiosqlite.connect(DB_PATH) as db:

@@ -174,12 +174,14 @@ class GameCog(commands.Cog):
     @app_commands.describe(
         difficulty="easy / medium / hard / extreme  (default: medium)",
         deck="piacentine / napoletane / siciliane / romagnole / triestine",
+        goes_first="you / bot / random  (default: random)",
     )
     async def vs_bot(
         self,
         interaction: discord.Interaction,
         difficulty: str = DEFAULT_DIFFICULTY,
         deck: str = DEFAULT_DECK,
+        goes_first: str = "random",
     ) -> None:
         channel = interaction.channel
         if not isinstance(channel, discord.TextChannel):
@@ -210,7 +212,26 @@ class GameCog(commands.Cog):
             )
             return
 
-        game = BriscolaGame(deck_config=cfg)
+        goes_first = goes_first.lower()
+        if goes_first not in ("you", "bot", "random"):
+            await interaction.response.send_message(
+                "goes_first must be: `you`, `bot`, or `random`.",
+                ephemeral=True,
+            )
+            return
+
+        import random as _random
+        if goes_first == "you":
+            first_player = 0   # human is always slot 0 in vs_bot
+            first_label = "You go first."
+        elif goes_first == "bot":
+            first_player = 1
+            first_label = "Bot goes first."
+        else:
+            first_player = _random.randint(0, 1)
+            first_label = "You go first. (coin toss)" if first_player == 0 else "Bot goes first. (coin toss)"
+
+        game = BriscolaGame(deck_config=cfg, first_player=first_player)
         slots = [
             PlayerSlot(user_id=interaction.user.id, is_bot=False),
             PlayerSlot(user_id=0, is_bot=True),
@@ -230,6 +251,7 @@ class GameCog(commands.Cog):
         embed.add_field(name="Difficulty", value=difficulty.capitalize())
         embed.add_field(name="Deck", value=cfg.label)
         embed.add_field(name="Trump suit", value=game.trump_suit)
+        embed.add_field(name="First move", value=first_label, inline=False)
         embed.set_footer(text="Use /briscola_hand on your turn.")
         await interaction.response.send_message(embed=embed)
         await show_trump(channel, session)
@@ -336,7 +358,9 @@ class GameCog(commands.Cog):
             return
 
         cfg = DECK_REGISTRY.get(challenge.deck_name, DEFAULT_DECK_CONFIG)
-        game = BriscolaGame(deck_config=cfg)
+        import random as _random
+        first_player = _random.randint(0, 1)
+        game = BriscolaGame(deck_config=cfg, first_player=first_player)
         slots = [
             PlayerSlot(user_id=challenge.challenger_id, is_bot=False),
             PlayerSlot(user_id=challenge.opponent_id, is_bot=False),
@@ -352,6 +376,11 @@ class GameCog(commands.Cog):
         registry.remove_challenge(channel.id)
 
         challenger = channel.guild.get_member(challenge.challenger_id)
+        first_mention = (
+            (challenger.mention if challenger else str(challenge.challenger_id))
+            if first_player == 0
+            else interaction.user.mention
+        )
         embed = discord.Embed(title="⚔️ Briscola 1v1", color=0xE74C3C)
         embed.add_field(
             name="Players",
@@ -363,6 +392,7 @@ class GameCog(commands.Cog):
         )
         embed.add_field(name="Deck", value=cfg.label)
         embed.add_field(name="Trump suit", value=game.trump_suit)
+        embed.add_field(name="First move", value=f"{first_mention} (coin toss)", inline=False)
         embed.set_footer(text="Use /briscola_hand on your turn.")
         await interaction.response.send_message(embed=embed)
         await show_trump(channel, session)
@@ -455,27 +485,18 @@ class GameCog(commands.Cog):
         content = "\n\n".join(parts)
 
         if show_deck_preview:
-            # Default preview: show Piacentine aces as a taster
+            import asyncio as _asyncio
             from engine.cards import PIACENTINE
+            from engine.card_renderer import render_hand
             cfg = PIACENTINE
             all_cards = cfg.build_deck(shuffle=False)
             aces = [c for c in all_cards if c.rank == "A"]
-            embeds = []
-            for card in aces:
-                url = cfg.image_url(card)
-                if url:
-                    e = discord.Embed(
-                        description=f"{cfg.short(card)}  ({card.suit})  -- Piacentine (default)",
-                        color=0xFFD700,
-                    )
-                    e.set_image(url=url)
-                    embeds.append(e)
-
-            if embeds:
-                await interaction.response.send_message(
-                    content=content, embeds=embeds, ephemeral=True
-                )
-                return
+            buf = await _asyncio.to_thread(render_hand, aces, cfg)
+            file = discord.File(buf, filename="piacentine_aces.png")
+            await interaction.response.send_message(
+                content=content, file=file, ephemeral=True
+            )
+            return
 
         await interaction.response.send_message(content=content, ephemeral=True)
 
@@ -507,19 +528,8 @@ class GameCog(commands.Cog):
 
         info = _DECK_INFO.get(deck, f"**{cfg.label}**\nNo additional info yet.")
 
-        # Build 4 ace embeds for this deck
         all_cards = cfg.build_deck(shuffle=False)
         aces = [c for c in all_cards if c.rank == "A"]
-        embeds = []
-        for card in aces:
-            url = cfg.image_url(card)
-            if url:
-                e = discord.Embed(
-                    description=f"{cfg.short(card)}  ({card.suit})",
-                    color=0xFFD700,
-                )
-                e.set_image(url=url)
-                embeds.append(e)
 
         content = (
             f"{info}\n\n"
@@ -527,12 +537,13 @@ class GameCog(commands.Cog):
             f"`/briscola_vs_bot deck:{deck}`  or  `/briscola_1v1 deck:{deck}`"
         )
 
-        if embeds:
-            await interaction.response.send_message(
-                content=content, embeds=embeds, ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(content=content, ephemeral=True)
+        import asyncio as _asyncio
+        from engine.card_renderer import render_hand
+        buf = await _asyncio.to_thread(render_hand, aces, cfg)
+        file = discord.File(buf, filename=f"{deck}_aces.png")
+        await interaction.response.send_message(
+            content=content, file=file, ephemeral=True
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -236,8 +236,7 @@ async def _schedule_turn_timeout(
             mention = seat_mention(channel.guild, s, seat)
             remaining = TURN_TOTAL_SECONDS - TURN_WARNING_SECONDS
             await channel.send(
-                f"⏰ {mention}, you have **{remaining}s** left to play "
-                f"or the game will end! (Deadline: <t:{int(deadline)}:R>)"
+                f"⏰ {mention}, you have **{remaining}s** left to play or the game will end."
             )
 
             # ---- Expiry ----

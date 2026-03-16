@@ -4,6 +4,7 @@ cogs/hand_cog.py
 /briscola_status — public game-state embed.
 """
 from __future__ import annotations
+import asyncio
 import time
 from typing import List, Optional
 import discord
@@ -68,14 +69,16 @@ class HandCog(commands.Cog):
             )
         hand_text = "\n".join(lines)
 
-        # Card image embeds (Discord allows up to 10 embeds but 3 is cleaner)
-        embeds: List[discord.Embed] = []
-        for card in hand[:3]:
-            url = cfg.image_url(card)
-            if url:
-                e = discord.Embed(description=cfg.short(card), color=0x2F3136)
-                e.set_image(url=url)
-                embeds.append(e)
+        # Build composite card image from local files (all 3 cards, side by side)
+        # Uses Pillow + local decks/ folder — see engine/card_renderer.py
+        # NOTE: only works when bot runs locally with decks/ present
+        try:
+            from engine.card_renderer import render_hand
+            import discord as _discord
+            buf = await asyncio.to_thread(render_hand, hand, cfg)
+            file = _discord.File(buf, filename="hand.png")
+        except Exception:
+            file = None
 
         # Sync view timeout with remaining turn time
         view_timeout = 150.0
@@ -90,7 +93,7 @@ class HandCog(commands.Cog):
                 "Select a card from the dropdown to play it:"
             ),
             view=view,
-            embeds=embeds if embeds else None,
+            file=file if file else discord.utils.MISSING,
             ephemeral=True,
         )
 

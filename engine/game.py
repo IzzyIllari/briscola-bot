@@ -26,7 +26,13 @@ class BriscolaGame:
       4. winner() → 0, 1, or None (tie).
     """
 
-    def __init__(self, deck_config: DeckConfig = DEFAULT_DECK_CONFIG):
+    def __init__(
+        self,
+        deck_config: DeckConfig = DEFAULT_DECK_CONFIG,
+        first_player: int = 0,
+    ):
+        if first_player not in (0, 1):
+            raise ValueError("first_player must be 0 or 1")
         self.deck_config: DeckConfig = deck_config
         self.deck: List[Card] = deck_config.build_deck(shuffle=True)
         self.num_players: int = 2
@@ -44,9 +50,9 @@ class BriscolaGame:
         self.trump_card: Optional[Card] = self.deck.pop()
         self.trump_suit: str = self.trump_card.suit
 
-        # Trick state
-        self.leader: int = 0
-        self.turn: int = 0
+        # Trick state — first_player leads the opening trick
+        self.leader: int = first_player
+        self.turn: int = first_player
         self.current_trick: List[Optional[Card]] = [None, None]
 
         # Card memory — every card visible to all players:
